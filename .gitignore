@@ -1,0 +1,25 @@
+# Backend (Java / Maven)
+backend/target/
+backend/.mvn/
+backend/*.iml
+backend/src/main/resources/application-local.properties
+
+# Frontend (Node / React)
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env*.local
+
+# Secrets, quel que soit l'endroit
+.env
+*.pem
+*.key
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
