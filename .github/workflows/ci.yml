@@ -1,0 +1,99 @@
+name: CI
+
+# Se déclenche à chaque push sur main et à chaque pull request vers main
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Annule une exécution devenue inutile quand un nouveau push arrive sur la même branche
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (build + tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    # Une base Postgres jetable, démarrée par GitHub pour la durée du job
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: pronoleague_dev
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pronoleague_dev"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      # Ces variables écrasent application-dev.properties (qui vise le port 5433 de ton PC)
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/pronoleague_dev
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      # Le fichier mvnw n'a pas le droit d'exécution dans Git (depuis Windows)
+      - name: Rendre mvnw exécutable
+        run: chmod +x mvnw
+
+      - name: Compiler et lancer les tests
+        run: ./mvnw -B verify
+
+  frontend:
+    name: Frontend (lint + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  docker:
+    name: Images Docker (construction seulement)
+    runs-on: ubuntu-latest
+    # Ne s'exécute que si le backend et le frontend sont au vert
+    needs: [backend, frontend]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Construire l'image du backend
+        run: docker build ./backend
+
+      - name: Construire l'image du frontend
+        run: docker build ./frontend
