@@ -58,6 +58,41 @@ jobs:
       - name: Compiler et lancer les tests
         run: ./mvnw -B verify
 
+      # Affiche la couverture directement sur la page de l'exécution (onglet "Summary")
+      - name: Résumé de la couverture
+        if: always()
+        run: |
+          python3 - <<'EOF'
+          import csv, os
+          path = "target/site/jacoco/jacoco.csv"
+          out = open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8")
+          if not os.path.exists(path):
+              out.write("## Couverture des tests\n\nAucun rapport JaCoCo (les tests ont échoué avant ?).\n")
+          else:
+              rows = list(csv.DictReader(open(path, encoding="utf-8")))
+              out.write("## Couverture des tests (lignes)\n\n")
+              out.write("| Classe | Lignes couvertes | Total | Taux |\n|---|---:|---:|---:|\n")
+              tm = tc = 0
+              for r in rows:
+                  m, c = int(r["LINE_MISSED"]), int(r["LINE_COVERED"])
+                  tm += m; tc += c
+                  taux = f"{100*c/(m+c):.0f} %" if m + c else "-"
+                  out.write(f"| {r['PACKAGE'].replace('com.pronoleague.backend','…')}.{r['CLASS']} | {c} | {m+c} | {taux} |\n")
+              total = tm + tc
+              pct = 100 * tc / total if total else 0
+              icone = "✅" if pct >= 80 else "❌"
+              out.write(f"\n**Total : {pct:.1f} %** ({tc}/{total} lignes) {icone} (seuil : 80 %)\n")
+          out.close()
+          EOF
+
+      # Le rapport de couverture JaCoCo est téléchargeable depuis la page de l'exécution
+      - name: Publier le rapport de couverture
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-couverture-jacoco
+          path: backend/target/site/jacoco
+
   frontend:
     name: Frontend (lint + build)
     runs-on: ubuntu-latest
